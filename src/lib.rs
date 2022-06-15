@@ -40,11 +40,8 @@ fn compute(input: Vec<u8>, key_table: [u32; 26], fun: TranscodeFn) -> Vec<u8> {
         let i0 = u32::from_le_bytes([iblock[0], iblock[1], iblock[2], iblock[3]]);
         let i1 = u32::from_le_bytes([iblock[4], iblock[5], iblock[6], iblock[7]]);
         let (o0, o1) = fun((i0, i1), key_table);
-        let [oblock0, oblock1, oblock2, oblock3] = o0.to_le_bytes();
-        let [oblock4, oblock5, oblock6, oblock7] = o1.to_le_bytes();
-        output.extend(&[
-            oblock0, oblock1, oblock2, oblock3, oblock4, oblock5, oblock6, oblock7,
-        ]);
+        output.extend(&o0.to_le_bytes());
+        output.extend(&o1.to_le_bytes());
     }
     output
 }
