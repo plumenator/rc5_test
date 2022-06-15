@@ -4,7 +4,7 @@ const Q: u32 = 0x9e3779b9;
 fn gen_key_table(key: Vec<u8>) -> [u32; 26] {
     let mut s = [0u32; 26];
     let mut l = [0u32; 4];
-    for i in (0..15).rev() {
+    for i in (0..16).rev() {
         l[i / 4] = (l[i / 4] << 8).wrapping_add(key[i] as u32);
     }
     s[0] = P;
