@@ -31,7 +31,25 @@ fn rotr(x: u32, y: u32) -> u32 {
     (x >> (y & 31u32)) | x.checked_shl(32u32 - (y & 31u32)).unwrap_or(0)
 }
 
-fn encode_block(plaintext: (u32, u32), key_table: &[u32; 26]) -> (u32, u32) {
+type TranscodeFn = fn((u32, u32), [u32; 26]) -> (u32, u32);
+
+fn compute(input: Vec<u8>, key_table: [u32; 26], fun: TranscodeFn) -> Vec<u8> {
+    assert!(input.len() % 8 == 0);
+    let mut output = Vec::new();
+    for iblock in input.chunks_exact(8) {
+        let i0 = u32::from_le_bytes([iblock[0], iblock[1], iblock[2], iblock[3]]);
+        let i1 = u32::from_le_bytes([iblock[4], iblock[5], iblock[6], iblock[7]]);
+        let (o0, o1) = fun((i0, i1), key_table);
+        let [oblock0, oblock1, oblock2, oblock3] = o0.to_le_bytes();
+        let [oblock4, oblock5, oblock6, oblock7] = o1.to_le_bytes();
+        output.extend(&[
+            oblock0, oblock1, oblock2, oblock3, oblock4, oblock5, oblock6, oblock7,
+        ]);
+    }
+    output
+}
+
+fn encode_block(plaintext: (u32, u32), key_table: [u32; 26]) -> (u32, u32) {
     let mut a = plaintext.0.wrapping_add(key_table[0]);
     let mut b = plaintext.1.wrapping_add(key_table[1]);
     for i in 1..=12 {
@@ -46,23 +64,10 @@ fn encode_block(plaintext: (u32, u32), key_table: &[u32; 26]) -> (u32, u32) {
  *
  */
 pub fn encode(key: Vec<u8>, plaintext: Vec<u8>) -> Vec<u8> {
-    let key_table = gen_key_table(key);
-    assert!(plaintext.len() % 8 == 0);
-    let mut ciphertext = Vec::new();
-    for pblock in plaintext.chunks_exact(8) {
-        let p0 = u32::from_le_bytes([pblock[0], pblock[1], pblock[2], pblock[3]]);
-        let p1 = u32::from_le_bytes([pblock[4], pblock[5], pblock[6], pblock[7]]);
-        let (c0, c1) = encode_block((p0, p1), &key_table);
-        let [cblock0, cblock1, cblock2, cblock3] = c0.to_le_bytes();
-        let [cblock4, cblock5, cblock6, cblock7] = c1.to_le_bytes();
-        ciphertext.extend(&[
-            cblock0, cblock1, cblock2, cblock3, cblock4, cblock5, cblock6, cblock7,
-        ]);
-    }
-    ciphertext
+    compute(plaintext, gen_key_table(key), encode_block)
 }
 
-fn decode_block(ciphertext: (u32, u32), key_table: &[u32; 26]) -> (u32, u32) {
+fn decode_block(ciphertext: (u32, u32), key_table: [u32; 26]) -> (u32, u32) {
     let mut b = ciphertext.1;
     let mut a = ciphertext.0;
     for i in (1..=12).rev() {
@@ -77,20 +82,7 @@ fn decode_block(ciphertext: (u32, u32), key_table: &[u32; 26]) -> (u32, u32) {
  *
  */
 pub fn decode(key: Vec<u8>, ciphertext: Vec<u8>) -> Vec<u8> {
-    let key_table = gen_key_table(key);
-    assert!(ciphertext.len() % 8 == 0);
-    let mut plaintext = Vec::new();
-    for cblock in ciphertext.chunks_exact(8) {
-        let c0 = u32::from_le_bytes([cblock[0], cblock[1], cblock[2], cblock[3]]);
-        let c1 = u32::from_le_bytes([cblock[4], cblock[5], cblock[6], cblock[7]]);
-        let (p0, p1) = decode_block((c0, c1), &key_table);
-        let [pblock0, pblock1, pblock2, pblock3] = p0.to_le_bytes();
-        let [pblock4, pblock5, pblock6, pblock7] = p1.to_le_bytes();
-        plaintext.extend(&[
-            pblock0, pblock1, pblock2, pblock3, pblock4, pblock5, pblock6, pblock7,
-        ]);
-    }
-    plaintext
+    compute(ciphertext, gen_key_table(key), decode_block)
 }
 
 #[cfg(test)]
@@ -162,6 +154,15 @@ mod tests {
         ];
         let pt = vec![0x63, 0x8B, 0x3A, 0x5E, 0xF7, 0x2B, 0x66, 0x3F];
         let ct = vec![0xEA, 0x02, 0x47, 0x14, 0xAD, 0x5C, 0x4D, 0x84];
+        let res = decode(key, ct);
+        assert!(pt[..] == res[..]);
+    }
+
+    #[test]
+    fn decode_c() {
+        let key = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+        let pt = vec![0, 0, 0, 0, 0, 0, 0, 0];
+        let ct = vec![0x21, 0xA5, 0xDB, 0xEE, 0x15, 0x4B, 0x8F, 0x6D];
         let res = decode(key, ct);
         assert!(pt[..] == res[..]);
     }
