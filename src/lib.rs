@@ -41,7 +41,7 @@ fn gen_key_table<W: PrimInt + Integer + WrappingAdd + MagicConstants>(
     key: Vec<u8>,
     rounds: u8,
 ) -> Vec<W> {
-    assert!(key.len() <= 255);
+    assert!(key.len() <= 255, "key should be 0 to 255 bytes long");
     let t = 2 * rounds as usize + 2;
     let mut s = vec![W::zero(); t];
     let w = W::zero().count_zeros() as usize;
@@ -116,7 +116,11 @@ where
     <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
 {
     let block_bytes = W::zero().count_zeros() as usize / 4;
-    assert!(input.len() % block_bytes == 0);
+    assert!(
+        input.len() % block_bytes == 0,
+        "input should be divisible into {} byte blocks",
+        block_bytes
+    );
     let mut output = Vec::new();
     for iblock in input.chunks_exact(block_bytes) {
         let (first, second) = iblock.split_at(block_bytes / 2);
