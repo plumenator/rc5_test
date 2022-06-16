@@ -1,57 +1,131 @@
-const P: u32 = 0xb7e15163;
-const Q: u32 = 0x9e3779b9;
+use std::{convert::TryFrom, fmt::Debug};
 
-fn gen_key_table(key: Vec<u8>) -> [u32; 26] {
-    let mut s = [0u32; 26];
-    let mut l = [0u32; 4];
-    for i in (0..16).rev() {
-        l[i / 4] = (l[i / 4] << 8).wrapping_add(key[i] as u32);
+use num::{
+    traits::{WrappingAdd, WrappingSub},
+    Integer, PrimInt,
+};
+
+trait MagicConstants {
+    fn p() -> Self;
+    fn q() -> Self;
+}
+
+impl MagicConstants for u32 {
+    fn p() -> Self {
+        0xb7e15163
     }
-    s[0] = P;
-    for i in 1..26 {
-        s[i] = s[i - 1].wrapping_add(Q);
+    fn q() -> Self {
+        0x9e3779b9
     }
-    let (mut a, mut b, mut i, mut j) = (0u32, 0u32, 0usize, 0usize);
-    for _ in 0..(3 * 26) {
-        s[i] = rotl(s[i].wrapping_add(a).wrapping_add(b), 3);
+}
+
+fn gen_key_table<W: PrimInt + Integer + WrappingAdd + MagicConstants>(key: Vec<u8>, rounds: usize) -> Vec<W> {
+    let t = 2 * rounds + 2;
+    let mut s = vec![W::zero(); t];
+    let w = W::zero().count_zeros() as usize;
+    let u = w / 8;
+    let c = 1.max(Integer::div_ceil(&(key.len() * 8), &w));
+    let mut l = vec![W::zero(); c];
+    for i in (0..key.len()).rev() {
+        l[i / u] = WrappingAdd::wrapping_add(
+            &l[i / u].unsigned_shl(8),
+            &W::from(key[i]).expect("W is larger than u8"),
+        );
+    }
+    s[0] = W::from(W::p()).expect("P fits in W");
+    for i in 1..t {
+        s[i] = WrappingAdd::wrapping_add(&s[i - 1], &W::from(W::q()).expect("Q fits in W"));
+    }
+    let (mut a, mut b, mut i, mut j) = (W::zero(), W::zero(), 0, 0);
+    for _ in 0..(3 * t.max(c)) {
+        s[i] = WrappingAdd::wrapping_add(&WrappingAdd::wrapping_add(&s[i], &a), &b)
+            .rotate_left(3 % w as u32);
         a = s[i];
-        l[j] = rotl(l[j].wrapping_add(a).wrapping_add(b), a.wrapping_add(b));
+        l[j] = WrappingAdd::wrapping_add(&WrappingAdd::wrapping_add(&l[j], &a), &b).rotate_left(
+            (WrappingAdd::wrapping_add(&a, &b) % W::from(w).expect("w fits in W"))
+                .to_u32()
+                .expect("a + b % w fits in u32"),
+        );
         b = l[j];
-        i = (i + 1) % 26;
-        j = (j + 1) % 4;
+        i = (i + 1) % t;
+        j = (j + 1) % c;
     }
     s
 }
 
-fn rotl(x: u32, y: u32) -> u32 {
-    (x << (y & 31u32)) | x.checked_shr(32u32 - (y & 31u32)).unwrap_or(0)
+type TranscodeFn<W> = fn((W, W), &[W]) -> (W, W);
+
+// Idea from https://www.reddit.com/r/rust/comments/g0inzh/is_there_a_trait_for_from_le_bytes_from_be_bytes/fn9vbfj/?utm_source=reddit&utm_medium=web2x&context=3
+
+trait FromLeBytes<'a> {
+    type Bytes: TryFrom<&'a [u8]>;
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self;
 }
 
-fn rotr(x: u32, y: u32) -> u32 {
-    (x >> (y & 31u32)) | x.checked_shl(32u32 - (y & 31u32)).unwrap_or(0)
+impl<'a> FromLeBytes<'a> for u32 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self {
+        Self::from_le_bytes(bytes)
+    }
 }
 
-type TranscodeFn = fn((u32, u32), [u32; 26]) -> (u32, u32);
+trait ToLeBytes<'a> {
+    type Bytes: AsRef<[u8]>;
 
-fn compute(input: Vec<u8>, key_table: [u32; 26], fun: TranscodeFn) -> Vec<u8> {
-    assert!(input.len() % 8 == 0);
+    fn to_le_bytes(num: Self) -> Self::Bytes;
+}
+
+impl<'a> ToLeBytes<'a> for u32 {
+    type Bytes = [u8; 4];
+
+    fn to_le_bytes(num: Self) -> Self::Bytes {
+        Self::to_le_bytes(num)
+    }
+}
+
+fn compute<'a, W: PrimInt + Integer + WrappingAdd + FromLeBytes<'a> + ToLeBytes<'a>>(
+    input: &'a [u8],
+    key_table: Vec<W>,
+    fun: TranscodeFn<W>,
+) -> Vec<u8>
+where
+    <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
+{
+    let block_bytes = W::zero().count_zeros() as usize / 4;
+    assert!(input.len() % block_bytes == 0);
     let mut output = Vec::new();
-    for iblock in input.chunks_exact(8) {
-        let i0 = u32::from_le_bytes([iblock[0], iblock[1], iblock[2], iblock[3]]);
-        let i1 = u32::from_le_bytes([iblock[4], iblock[5], iblock[6], iblock[7]]);
-        let (o0, o1) = fun((i0, i1), key_table);
-        output.extend(&o0.to_le_bytes());
-        output.extend(&o1.to_le_bytes());
+    for iblock in input.chunks_exact(block_bytes) {
+        let (first, second) = iblock.split_at(block_bytes / 2);
+        let i0 = W::from_le_bytes(
+            <W as FromLeBytes>::Bytes::try_from(first).expect("w == W::Bytes::len()"),
+        );
+        let i1 = W::from_le_bytes(
+            <W as FromLeBytes>::Bytes::try_from(second).expect("w == W::Bytes::len()"),
+        );
+        let (o0, o1) = fun((i0, i1), &key_table);
+        output.extend(W::to_le_bytes(o0).as_ref());
+        output.extend(W::to_le_bytes(o1).as_ref());
     }
     output
 }
 
-fn encode_block(plaintext: (u32, u32), key_table: [u32; 26]) -> (u32, u32) {
-    let mut a = plaintext.0.wrapping_add(key_table[0]);
-    let mut b = plaintext.1.wrapping_add(key_table[1]);
-    for i in 1..=12 {
-        a = rotl(a ^ b, b).wrapping_add(key_table[2 * i]);
-        b = rotl(b ^ a, a).wrapping_add(key_table[2 * i + 1]);
+fn encode_block<W: PrimInt + Integer + WrappingAdd>(plaintext: (W, W), key_table: &[W]) -> (W, W) {
+    let w = W::from(W::zero().count_zeros()).expect("w fits in W");
+    let mut a = WrappingAdd::wrapping_add(&plaintext.0, &key_table[0]);
+    let mut b = WrappingAdd::wrapping_add(&plaintext.1, &key_table[1]);
+    let rounds = key_table.len() / 2 - 1;
+
+    for i in 1..=rounds {
+        a = WrappingAdd::wrapping_add(
+            &(a ^ b).rotate_left((b % w).to_u32().expect("b % w fits in u32")),
+            &key_table[2 * i],
+        );
+        b = WrappingAdd::wrapping_add(
+            &(b ^ a).rotate_left((a % w).to_u32().expect("a % w fits in u32")),
+            &key_table[2 * i + 1],
+        );
     }
     (a, b)
 }
@@ -61,17 +135,26 @@ fn encode_block(plaintext: (u32, u32), key_table: [u32; 26]) -> (u32, u32) {
  *
  */
 pub fn encode(key: Vec<u8>, plaintext: Vec<u8>) -> Vec<u8> {
-    compute(plaintext, gen_key_table(key), encode_block)
+    compute::<u32>(&plaintext, gen_key_table(key, 12), encode_block)
 }
 
-fn decode_block(ciphertext: (u32, u32), key_table: [u32; 26]) -> (u32, u32) {
+fn decode_block<W: PrimInt + Integer + WrappingSub>(ciphertext: (W, W), key_table: &[W]) -> (W, W) {
+    let w = W::from(W::zero().count_zeros()).expect("w fits in W");
     let mut b = ciphertext.1;
     let mut a = ciphertext.0;
-    for i in (1..=12).rev() {
-        b = rotr(b.wrapping_sub(key_table[2 * i + 1]), a) ^ a;
-        a = rotr(a.wrapping_sub(key_table[2 * i]), b) ^ b;
+    let rounds = key_table.len() / 2 - 1;
+    for i in (1..=rounds).rev() {
+        b = WrappingSub::wrapping_sub(&b, &key_table[2 * i + 1])
+            .rotate_right((a % w).to_u32().expect("a % w fits in u32"))
+            ^ a;
+        a = WrappingSub::wrapping_sub(&a, &key_table[2 * i])
+            .rotate_right((b % w).to_u32().expect("b % w fits in u32"))
+            ^ b;
     }
-    (a.wrapping_sub(key_table[0]), b.wrapping_sub(key_table[1]))
+    (
+        WrappingSub::wrapping_sub(&a, &key_table[0]),
+        WrappingSub::wrapping_sub(&b, &key_table[1]),
+    )
 }
 
 /*
@@ -79,7 +162,7 @@ fn decode_block(ciphertext: (u32, u32), key_table: [u32; 26]) -> (u32, u32) {
  *
  */
 pub fn decode(key: Vec<u8>, ciphertext: Vec<u8>) -> Vec<u8> {
-    compute(ciphertext, gen_key_table(key), decode_block)
+    compute::<u32>(&ciphertext, gen_key_table(key, 12), decode_block)
 }
 
 #[cfg(test)]
