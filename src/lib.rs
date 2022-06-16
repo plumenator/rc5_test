@@ -37,10 +37,62 @@ impl MagicConstants for u64 {
     }
 }
 
-fn gen_key_table<W: PrimInt + Integer + WrappingAdd + MagicConstants>(
-    key: Vec<u8>,
-    rounds: u8,
-) -> Vec<W> {
+// Idea from https://www.reddit.com/r/rust/comments/g0inzh/is_there_a_pub trait_for_from_le_bytes_from_be_bytes/fn9vbfj/?utm_source=reddit&utm_medium=web2x&context=3
+
+pub trait FromLeBytes<'a> {
+    type Bytes: TryFrom<&'a [u8]>;
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self;
+}
+
+impl<'a> FromLeBytes<'a> for u32 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self {
+        Self::from_le_bytes(bytes)
+    }
+}
+
+pub trait ToLeBytes<'a> {
+    type Bytes: AsRef<[u8]>;
+
+    fn to_le_bytes(num: Self) -> Self::Bytes;
+}
+
+impl<'a> ToLeBytes<'a> for u32 {
+    type Bytes = [u8; 4];
+
+    fn to_le_bytes(num: Self) -> Self::Bytes {
+        Self::to_le_bytes(num)
+    }
+}
+
+pub trait Word<'a>:
+    PrimInt + Integer + WrappingAdd + WrappingSub + FromLeBytes<'a> + ToLeBytes<'a> + MagicConstants
+where
+    <<Self as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
+{
+}
+
+impl<
+        'a,
+        T: PrimInt
+            + Integer
+            + WrappingAdd
+            + WrappingSub
+            + FromLeBytes<'a>
+            + ToLeBytes<'a>
+            + MagicConstants,
+    > Word<'a> for T
+where
+    <<T as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
+{
+}
+
+fn gen_key_table<'a, W: Word<'a>>(key: Vec<u8>, rounds: u8) -> Vec<W>
+where
+    <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
+{
     assert!(key.len() <= 255, "key should be 0 to 255 bytes long");
     let t = 2 * rounds as usize + 2;
     let mut s = vec![W::zero(); t];
@@ -77,41 +129,7 @@ fn gen_key_table<W: PrimInt + Integer + WrappingAdd + MagicConstants>(
 
 type TranscodeFn<W> = fn((W, W), &[W]) -> (W, W);
 
-// Idea from https://www.reddit.com/r/rust/comments/g0inzh/is_there_a_pub trait_for_from_le_bytes_from_be_bytes/fn9vbfj/?utm_source=reddit&utm_medium=web2x&context=3
-
-pub trait FromLeBytes<'a> {
-    type Bytes: TryFrom<&'a [u8]>;
-
-    fn from_le_bytes(bytes: Self::Bytes) -> Self;
-}
-
-impl<'a> FromLeBytes<'a> for u32 {
-    type Bytes = [u8; Self::BITS as usize / 8];
-
-    fn from_le_bytes(bytes: Self::Bytes) -> Self {
-        Self::from_le_bytes(bytes)
-    }
-}
-
-pub trait ToLeBytes<'a> {
-    type Bytes: AsRef<[u8]>;
-
-    fn to_le_bytes(num: Self) -> Self::Bytes;
-}
-
-impl<'a> ToLeBytes<'a> for u32 {
-    type Bytes = [u8; 4];
-
-    fn to_le_bytes(num: Self) -> Self::Bytes {
-        Self::to_le_bytes(num)
-    }
-}
-
-fn compute<'a, W: PrimInt + Integer + WrappingAdd + FromLeBytes<'a> + ToLeBytes<'a>>(
-    input: &'a [u8],
-    key_table: Vec<W>,
-    fun: TranscodeFn<W>,
-) -> Vec<u8>
+fn compute<'a, W: Word<'a>>(input: &'a [u8], key_table: Vec<W>, fun: TranscodeFn<W>) -> Vec<u8>
 where
     <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
 {
@@ -137,7 +155,10 @@ where
     output
 }
 
-fn encode_block<W: PrimInt + Integer + WrappingAdd>(plaintext: (W, W), key_table: &[W]) -> (W, W) {
+fn encode_block<'a, W: Word<'a>>(plaintext: (W, W), key_table: &[W]) -> (W, W)
+where
+    <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
+{
     let w = W::from(W::zero().count_zeros()).expect("w fits in W");
     let mut a = WrappingAdd::wrapping_add(&plaintext.0, &key_table[0]);
     let mut b = WrappingAdd::wrapping_add(&plaintext.1, &key_table[1]);
@@ -160,20 +181,17 @@ fn encode_block<W: PrimInt + Integer + WrappingAdd>(plaintext: (W, W), key_table
  * This function should return a cipher text for a given key and plaintext
  *
  */
-pub fn encode<
-    'a,
-    W: PrimInt + Integer + WrappingAdd + FromLeBytes<'a> + ToLeBytes<'a> + MagicConstants,
->(
-    key: Vec<u8>,
-    plaintext: &'a [u8],
-) -> Vec<u8>
+pub fn encode<'a, W: Word<'a>>(key: Vec<u8>, plaintext: &'a [u8]) -> Vec<u8>
 where
     <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
 {
     compute::<W>(plaintext, gen_key_table(key, 12), encode_block)
 }
 
-fn decode_block<W: PrimInt + Integer + WrappingSub>(ciphertext: (W, W), key_table: &[W]) -> (W, W) {
+fn decode_block<'a, W: Word<'a>>(ciphertext: (W, W), key_table: &[W]) -> (W, W)
+where
+    <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
+{
     let w = W::from(W::zero().count_zeros()).expect("w fits in W");
     let mut b = ciphertext.1;
     let mut a = ciphertext.0;
@@ -196,19 +214,7 @@ fn decode_block<W: PrimInt + Integer + WrappingSub>(ciphertext: (W, W), key_tabl
  * This function should return a plaintext for a given key and ciphertext
  *
  */
-pub fn decode<
-    'a,
-    W: PrimInt
-        + Integer
-        + WrappingAdd
-        + WrappingSub
-        + FromLeBytes<'a>
-        + ToLeBytes<'a>
-        + MagicConstants,
->(
-    key: Vec<u8>,
-    ciphertext: &'a [u8],
-) -> Vec<u8>
+pub fn decode<'a, W: Word<'a>>(key: Vec<u8>, ciphertext: &'a [u8]) -> Vec<u8>
 where
     <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
 {
