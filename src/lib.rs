@@ -10,6 +10,15 @@ trait MagicConstants {
     fn q() -> Self;
 }
 
+impl MagicConstants for u16 {
+    fn p() -> Self {
+        0xb7e1
+    }
+    fn q() -> Self {
+        0x9e37
+    }
+}
+
 impl MagicConstants for u32 {
     fn p() -> Self {
         0xb7e15163
@@ -19,8 +28,20 @@ impl MagicConstants for u32 {
     }
 }
 
-fn gen_key_table<W: PrimInt + Integer + WrappingAdd + MagicConstants>(key: Vec<u8>, rounds: usize) -> Vec<W> {
-    let t = 2 * rounds + 2;
+impl MagicConstants for u64 {
+    fn p() -> Self {
+        0xb7e151628aed2a6b
+    }
+    fn q() -> Self {
+        0x9e3779b97f4a7c15
+    }
+}
+
+fn gen_key_table<W: PrimInt + Integer + WrappingAdd + MagicConstants>(
+    key: Vec<u8>,
+    rounds: u8,
+) -> Vec<W> {
+    let t = 2 * rounds as usize + 2;
     let mut s = vec![W::zero(); t];
     let w = W::zero().count_zeros() as usize;
     let u = w / 8;
