@@ -45,7 +45,23 @@ pub trait FromLeBytes<'a> {
     fn from_le_bytes(bytes: Self::Bytes) -> Self;
 }
 
+impl<'a> FromLeBytes<'a> for u16 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self {
+        Self::from_le_bytes(bytes)
+    }
+}
+
 impl<'a> FromLeBytes<'a> for u32 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self {
+        Self::from_le_bytes(bytes)
+    }
+}
+
+impl<'a> FromLeBytes<'a> for u64 {
     type Bytes = [u8; Self::BITS as usize / 8];
 
     fn from_le_bytes(bytes: Self::Bytes) -> Self {
@@ -59,8 +75,24 @@ pub trait ToLeBytes<'a> {
     fn to_le_bytes(num: Self) -> Self::Bytes;
 }
 
+impl<'a> ToLeBytes<'a> for u16 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn to_le_bytes(num: Self) -> Self::Bytes {
+        Self::to_le_bytes(num)
+    }
+}
+
 impl<'a> ToLeBytes<'a> for u32 {
-    type Bytes = [u8; 4];
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn to_le_bytes(num: Self) -> Self::Bytes {
+        Self::to_le_bytes(num)
+    }
+}
+
+impl<'a> ToLeBytes<'a> for u64 {
+    type Bytes = [u8; Self::BITS as usize / 8];
 
     fn to_le_bytes(num: Self) -> Self::Bytes {
         Self::to_le_bytes(num)
