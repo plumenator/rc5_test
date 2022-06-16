@@ -41,6 +41,7 @@ fn gen_key_table<W: PrimInt + Integer + WrappingAdd + MagicConstants>(
     key: Vec<u8>,
     rounds: u8,
 ) -> Vec<W> {
+    assert!(key.len() <= 255);
     let t = 2 * rounds as usize + 2;
     let mut s = vec![W::zero(); t];
     let w = W::zero().count_zeros() as usize;
