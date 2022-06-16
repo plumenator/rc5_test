@@ -257,6 +257,37 @@ where
 mod tests {
     use super::*;
 
+    fn byte_vec(s: &str) -> Vec<u8> {
+        hex::decode(s).expect("parses as hex")
+    }
+
+    #[test]
+    fn encode_16_16_8() {
+        let key = byte_vec("0001020304050607");
+        let pt = byte_vec("00010203");
+        let ct = byte_vec("23A8D72E");
+        let res = encode::<u16>(key, &pt, 16);
+        assert!(ct[..] == res[..]);
+    }
+
+    #[test]
+    fn encode_32_20_16() {
+        let key = byte_vec("000102030405060708090A0B0C0D0E0F");
+        let pt = byte_vec("0001020304050607");
+        let ct = byte_vec("2A0EDC0E9431FF73");
+        let res = encode::<u32>(key, &pt, 20);
+        assert!(ct[..] == res[..]);
+    }
+
+    #[test]
+    fn encode_64_24_24() {
+        let key = byte_vec("000102030405060708090A0B0C0D0E0F1011121314151617");
+        let pt = byte_vec("000102030405060708090A0B0C0D0E0F");
+        let ct = byte_vec("A46772820EDBCE0235ABEA32AE7178DA");
+        let res = encode::<u64>(key, &pt, 24);
+        assert!(ct[..] == res[..]);
+    }
+
     #[test]
     fn encode_32_a() {
         let key = vec![
@@ -336,6 +367,33 @@ mod tests {
         let ct = vec![0xEB, 0x44, 0xE4, 0x15, 0xDA, 0x31, 0x98, 0x24];
         let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
+    }
+
+    #[test]
+    fn decode_16_16_8() {
+        let key = byte_vec("0001020304050607");
+        let pt = byte_vec("00010203");
+        let ct = byte_vec("23A8D72E");
+        let res = decode::<u16>(key, &ct, 16);
+        assert!(pt[..] == res[..]);
+    }
+
+    #[test]
+    fn decode_32_20_16() {
+        let key = byte_vec("000102030405060708090A0B0C0D0E0F");
+        let pt = byte_vec("0001020304050607");
+        let ct = byte_vec("2A0EDC0E9431FF73");
+        let res = decode::<u32>(key, &ct, 20);
+        assert!(pt[..] == res[..]);
+    }
+
+    #[test]
+    fn decode_64_24_24() {
+        let key = byte_vec("000102030405060708090A0B0C0D0E0F1011121314151617");
+        let pt = byte_vec("000102030405060708090A0B0C0D0E0F");
+        let ct = byte_vec("A46772820EDBCE0235ABEA32AE7178DA");
+        let res = decode::<u64>(key, &ct, 24);
+        assert!(pt[..] == res[..]);
     }
 
     #[test]
