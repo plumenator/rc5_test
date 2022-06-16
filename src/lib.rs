@@ -181,11 +181,11 @@ where
  * This function should return a cipher text for a given key and plaintext
  *
  */
-pub fn encode<'a, W: Word<'a>>(key: Vec<u8>, plaintext: &'a [u8]) -> Vec<u8>
+pub fn encode<'a, W: Word<'a>>(key: Vec<u8>, plaintext: &'a [u8], rounds: u8) -> Vec<u8>
 where
     <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
 {
-    compute::<W>(plaintext, gen_key_table(key, 12), encode_block)
+    compute::<W>(plaintext, gen_key_table(key, rounds), encode_block)
 }
 
 fn decode_block<'a, W: Word<'a>>(ciphertext: (W, W), key_table: &[W]) -> (W, W)
@@ -214,11 +214,11 @@ where
  * This function should return a plaintext for a given key and ciphertext
  *
  */
-pub fn decode<'a, W: Word<'a>>(key: Vec<u8>, ciphertext: &'a [u8]) -> Vec<u8>
+pub fn decode<'a, W: Word<'a>>(key: Vec<u8>, ciphertext: &'a [u8], rounds: u8) -> Vec<u8>
 where
     <<W as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
 {
-    compute::<W>(ciphertext, gen_key_table(key, 12), decode_block)
+    compute::<W>(ciphertext, gen_key_table(key, rounds), decode_block)
 }
 
 #[cfg(test)]
@@ -233,7 +233,7 @@ mod tests {
         ];
         let pt = vec![0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];
         let ct = vec![0x2D, 0xDC, 0x14, 0x9B, 0xCF, 0x08, 0x8B, 0x9E];
-        let res = encode::<u32>(key, &pt);
+        let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
     }
 
@@ -245,7 +245,7 @@ mod tests {
         ];
         let pt = vec![0xEA, 0x02, 0x47, 0x14, 0xAD, 0x5C, 0x4D, 0x84];
         let ct = vec![0x11, 0xE4, 0x3B, 0x86, 0xD2, 0x31, 0xEA, 0x64];
-        let res = encode::<u32>(key, &pt);
+        let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
     }
 
@@ -254,7 +254,7 @@ mod tests {
         let key = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let pt = vec![0, 0, 0, 0, 0, 0, 0, 0];
         let ct = vec![0x21, 0xA5, 0xDB, 0xEE, 0x15, 0x4B, 0x8F, 0x6D];
-        let res = encode::<u32>(key, &pt);
+        let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
     }
 
@@ -266,7 +266,7 @@ mod tests {
         ];
         let pt = vec![0x21, 0xA5, 0xDB, 0xEE, 0x15, 0x4B, 0x8F, 0x6D];
         let ct = vec![0xF7, 0xC0, 0x13, 0xAC, 0x5B, 0x2B, 0x89, 0x52];
-        let res = encode::<u32>(key, &pt);
+        let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
     }
 
@@ -278,7 +278,7 @@ mod tests {
         ];
         let pt = vec![0xF7, 0xC0, 0x13, 0xAC, 0x5B, 0x2B, 0x89, 0x52];
         let ct = vec![0x2F, 0x42, 0xB3, 0xB7, 0x03, 0x69, 0xFC, 0x92];
-        let res = encode::<u32>(key, &pt);
+        let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
     }
 
@@ -290,7 +290,7 @@ mod tests {
         ];
         let pt = vec![0x2F, 0x42, 0xB3, 0xB7, 0x03, 0x69, 0xFC, 0x92];
         let ct = vec![0x65, 0xC1, 0x78, 0xB2, 0x84, 0xD1, 0x97, 0xCC];
-        let res = encode::<u32>(key, &pt);
+        let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
     }
 
@@ -302,7 +302,7 @@ mod tests {
         ];
         let pt = vec![0x65, 0xC1, 0x78, 0xB2, 0x84, 0xD1, 0x97, 0xCC];
         let ct = vec![0xEB, 0x44, 0xE4, 0x15, 0xDA, 0x31, 0x98, 0x24];
-        let res = encode::<u32>(key, &pt);
+        let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
     }
 
@@ -314,7 +314,7 @@ mod tests {
         ];
         let pt = vec![0x96, 0x95, 0x0D, 0xDA, 0x65, 0x4A, 0x3D, 0x62];
         let ct = vec![0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77];
-        let res = decode::<u32>(key, &ct);
+        let res = decode::<u32>(key, &ct, 12);
         assert!(pt[..] == res[..]);
     }
 
@@ -326,7 +326,7 @@ mod tests {
         ];
         let pt = vec![0x63, 0x8B, 0x3A, 0x5E, 0xF7, 0x2B, 0x66, 0x3F];
         let ct = vec![0xEA, 0x02, 0x47, 0x14, 0xAD, 0x5C, 0x4D, 0x84];
-        let res = decode::<u32>(key, &ct);
+        let res = decode::<u32>(key, &ct, 12);
         assert!(pt[..] == res[..]);
     }
 
@@ -335,7 +335,7 @@ mod tests {
         let key = vec![0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
         let pt = vec![0, 0, 0, 0, 0, 0, 0, 0];
         let ct = vec![0x21, 0xA5, 0xDB, 0xEE, 0x15, 0x4B, 0x8F, 0x6D];
-        let res = decode::<u32>(key, &ct);
+        let res = decode::<u32>(key, &ct, 12);
         assert!(pt[..] == res[..]);
     }
 
@@ -347,7 +347,7 @@ mod tests {
         ];
         let pt = vec![0x21, 0xA5, 0xDB, 0xEE, 0x15, 0x4B, 0x8F, 0x6D];
         let ct = vec![0xF7, 0xC0, 0x13, 0xAC, 0x5B, 0x2B, 0x89, 0x52];
-        let res = decode::<u32>(key, &ct);
+        let res = decode::<u32>(key, &ct, 12);
         assert!(pt[..] == res[..]);
     }
 
@@ -359,7 +359,7 @@ mod tests {
         ];
         let pt = vec![0xF7, 0xC0, 0x13, 0xAC, 0x5B, 0x2B, 0x89, 0x52];
         let ct = vec![0x2F, 0x42, 0xB3, 0xB7, 0x03, 0x69, 0xFC, 0x92];
-        let res = decode::<u32>(key, &ct);
+        let res = decode::<u32>(key, &ct, 12);
         assert!(pt[..] == res[..]);
     }
 
@@ -371,7 +371,7 @@ mod tests {
         ];
         let pt = vec![0x2F, 0x42, 0xB3, 0xB7, 0x03, 0x69, 0xFC, 0x92];
         let ct = vec![0x65, 0xC1, 0x78, 0xB2, 0x84, 0xD1, 0x97, 0xCC];
-        let res = decode::<u32>(key, &ct);
+        let res = decode::<u32>(key, &ct, 12);
         assert!(pt[..] == res[..]);
     }
 
@@ -383,7 +383,7 @@ mod tests {
         ];
         let pt = vec![0x65, 0xC1, 0x78, 0xB2, 0x84, 0xD1, 0x97, 0xCC];
         let ct = vec![0xEB, 0x44, 0xE4, 0x15, 0xDA, 0x31, 0x98, 0x24];
-        let res = decode::<u32>(key, &ct);
+        let res = decode::<u32>(key, &ct, 12);
         assert!(pt[..] == res[..]);
     }
 }
