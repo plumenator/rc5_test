@@ -1,13 +1,22 @@
 use std::{convert::TryFrom, fmt::Debug};
 
 use num::{
-    traits::{WrappingAdd, WrappingSub},
+    traits::{CheckedShl, WrappingAdd, WrappingSub},
     Integer, PrimInt,
 };
 
 pub trait MagicConstants {
     fn p() -> Self;
     fn q() -> Self;
+}
+
+impl MagicConstants for u8 {
+    fn p() -> Self {
+        0xb7
+    }
+    fn q() -> Self {
+        0x9F
+    }
 }
 
 impl MagicConstants for u16 {
@@ -45,6 +54,14 @@ pub trait FromLeBytes<'a> {
     fn from_le_bytes(bytes: Self::Bytes) -> Self;
 }
 
+impl<'a> FromLeBytes<'a> for u8 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self {
+        Self::from_le_bytes(bytes)
+    }
+}
+
 impl<'a> FromLeBytes<'a> for u16 {
     type Bytes = [u8; Self::BITS as usize / 8];
 
@@ -75,6 +92,14 @@ pub trait ToLeBytes<'a> {
     fn to_le_bytes(num: Self) -> Self::Bytes;
 }
 
+impl<'a> ToLeBytes<'a> for u8 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn to_le_bytes(num: Self) -> Self::Bytes {
+        Self::to_le_bytes(num)
+    }
+}
+
 impl<'a> ToLeBytes<'a> for u16 {
     type Bytes = [u8; Self::BITS as usize / 8];
 
@@ -100,7 +125,14 @@ impl<'a> ToLeBytes<'a> for u64 {
 }
 
 pub trait Word<'a>:
-    PrimInt + Integer + WrappingAdd + WrappingSub + FromLeBytes<'a> + ToLeBytes<'a> + MagicConstants
+    PrimInt
+    + Integer
+    + WrappingAdd
+    + WrappingSub
+    + CheckedShl
+    + FromLeBytes<'a>
+    + ToLeBytes<'a>
+    + MagicConstants
 where
     <<Self as FromLeBytes<'a>>::Bytes as TryFrom<&'a [u8]>>::Error: Debug,
 {
@@ -112,6 +144,7 @@ impl<
             + Integer
             + WrappingAdd
             + WrappingSub
+            + CheckedShl
             + FromLeBytes<'a>
             + ToLeBytes<'a>
             + MagicConstants,
@@ -134,7 +167,7 @@ where
     let mut l = vec![W::zero(); c];
     for i in (0..key.len()).rev() {
         l[i / u] = WrappingAdd::wrapping_add(
-            &l[i / u].unsigned_shl(8),
+            &l[i / u].checked_shl(8).unwrap_or(l[i / u]),
             &W::from(key[i]).expect("W is larger than u8"),
         );
     }
@@ -262,6 +295,15 @@ mod tests {
     }
 
     #[test]
+    fn encode_8_12_4() {
+        let key = byte_vec("00010203");
+        let pt = byte_vec("0001");
+        let ct = byte_vec("212A");
+        let res = encode::<u8>(key, &pt, 12);
+        assert!(ct[..] == res[..]);
+    }
+
+    #[test]
     fn encode_16_16_8() {
         let key = byte_vec("0001020304050607");
         let pt = byte_vec("00010203");
@@ -367,6 +409,15 @@ mod tests {
         let ct = vec![0xEB, 0x44, 0xE4, 0x15, 0xDA, 0x31, 0x98, 0x24];
         let res = encode::<u32>(key, &pt, 12);
         assert!(ct[..] == res[..]);
+    }
+
+    #[test]
+    fn decode_8_12_4() {
+        let key = byte_vec("00010203");
+        let pt = byte_vec("0001");
+        let ct = byte_vec("212A");
+        let res = decode::<u8>(key, &ct, 12);
+        assert!(pt[..] == res[..]);
     }
 
     #[test]
