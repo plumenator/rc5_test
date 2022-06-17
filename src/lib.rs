@@ -46,6 +46,15 @@ impl MagicConstants for u64 {
     }
 }
 
+impl MagicConstants for u128 {
+    fn p() -> Self {
+        0xb7e151628aed2a6abf7158809cf4f3c7
+    }
+    fn q() -> Self {
+        0x9e3779b97f4a7c15f39cc0605cedc835
+    }
+}
+
 // Idea from https://www.reddit.com/r/rust/comments/g0inzh/is_there_a_pub trait_for_from_le_bytes_from_be_bytes/fn9vbfj/?utm_source=reddit&utm_medium=web2x&context=3
 
 pub trait FromLeBytes<'a> {
@@ -86,6 +95,14 @@ impl<'a> FromLeBytes<'a> for u64 {
     }
 }
 
+impl<'a> FromLeBytes<'a> for u128 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn from_le_bytes(bytes: Self::Bytes) -> Self {
+        Self::from_le_bytes(bytes)
+    }
+}
+
 pub trait ToLeBytes<'a> {
     type Bytes: AsRef<[u8]>;
 
@@ -117,6 +134,14 @@ impl<'a> ToLeBytes<'a> for u32 {
 }
 
 impl<'a> ToLeBytes<'a> for u64 {
+    type Bytes = [u8; Self::BITS as usize / 8];
+
+    fn to_le_bytes(num: Self) -> Self::Bytes {
+        Self::to_le_bytes(num)
+    }
+}
+
+impl<'a> ToLeBytes<'a> for u128 {
     type Bytes = [u8; Self::BITS as usize / 8];
 
     fn to_le_bytes(num: Self) -> Self::Bytes {
@@ -331,6 +356,15 @@ mod tests {
     }
 
     #[test]
+    fn encode_128_28_32() {
+        let key = byte_vec("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F");
+        let pt = byte_vec("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F");
+        let ct = byte_vec("ECA5910921A4F4CFDD7AD7AD20A1FCBA068EC7A7CD752D68FE914B7FE180B440");
+        let res = encode::<u128>(key, &pt, 28);
+        assert!(ct[..] == res[..]);
+    }
+
+    #[test]
     fn encode_32_a() {
         let key = vec![
             0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D,
@@ -444,6 +478,15 @@ mod tests {
         let pt = byte_vec("000102030405060708090A0B0C0D0E0F");
         let ct = byte_vec("A46772820EDBCE0235ABEA32AE7178DA");
         let res = decode::<u64>(key, &ct, 24);
+        assert!(pt[..] == res[..]);
+    }
+
+    #[test]
+    fn decode_128_28_32() {
+        let key = byte_vec("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F");
+        let pt = byte_vec("000102030405060708090A0B0C0D0E0F101112131415161718191A1B1C1D1E1F");
+        let ct = byte_vec("ECA5910921A4F4CFDD7AD7AD20A1FCBA068EC7A7CD752D68FE914B7FE180B440");
+        let res = decode::<u128>(key, &ct, 28);
         assert!(pt[..] == res[..]);
     }
 
